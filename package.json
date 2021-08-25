@@ -1,8 +1,8 @@
 {
-  "name": "homebridge-dynamic-platform-example",
-  "version": "1.0.0",
+  "name": "homebridge-miyo-garden",
+  "version": "0.0.1",
   "description": "An example dynamic platform plugin for homebridge written in Typescript",
-  "main": "dist/dynamic-platform.js",
+  "main": "dist/miyo-platform.js",
   "scripts": {
     "clean": "rimraf ./dist",
     "build": "rimraf ./dist && tsc",
@@ -10,10 +10,15 @@
     "postpublish": "npm run clean",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "author": "Andreas Bauer <mail@anderl-bauer.de>",
+  "author": "Christoph Tonnier <kleiner86@hotmail.com>",
   "engines": {
     "homebridge": ">=1.0.0"
   },
+  "keywords": [
+    "homebridge-plugin",
+    "miyo",
+    "garden"
+  ],
   "license": "ISC",
   "files": [
     "LICENSE",
@@ -21,15 +26,19 @@
   ],
   "repository": {
     "type": "git",
-    "url": "git://github.com/homebridge/homebridge-examples.git"
+    "url": "git://https://github.com/cton/homebridge-miyo-garden.git"
   },
   "bugs": {
-    "url": "http://github.com/homebridge/homebridge-examples/issues"
+    "url": "http://https://github.com/cton/homebridge-miyo-garden/issues"
   },
   "devDependencies": {
     "@types/node": "10.17.19",
-    "typescript": "^3.8.3",
+    "@types/ws": "^7.4.7",
+    "homebridge": "^1.0.4",
     "rimraf": "^3.0.2",
-    "homebridge": "^1.0.4"
+    "typescript": "^3.8.3"
+  },
+  "dependencies": {
+    "ws": "^8.2.0"
   }
 }

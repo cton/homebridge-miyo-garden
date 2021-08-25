@@ -1,4 +1,4 @@
-import http, {IncomingMessage, Server, ServerResponse} from "http";
+import WebSocket from "ws";
 import {
   API,
   APIEvent,
@@ -13,8 +13,8 @@ import {
   PlatformConfig,
 } from "homebridge";
 
-const PLUGIN_NAME = "homebridge-dynamic-platform-example";
-const PLATFORM_NAME = "ExampleDynamicPlatform";
+const PLUGIN_NAME = "homebridge-miyo-garden";
+const PLATFORM_NAME = "MiyoPlatform";
 
 /*
  * IMPORTANT NOTICE
@@ -45,25 +45,30 @@ export = (api: API) => {
   hap = api.hap;
   Accessory = api.platformAccessory;
 
-  api.registerPlatform(PLATFORM_NAME, ExampleDynamicPlatform);
+  api.registerPlatform(PLATFORM_NAME, MiyoPlatform);
 };
 
-class ExampleDynamicPlatform implements DynamicPlatformPlugin {
-
+class MiyoPlatform implements DynamicPlatformPlugin {
   private readonly log: Logging;
   private readonly api: API;
+  private readonly port: Number;
+  private readonly ipAddress: String;
+  private readonly apiKey: String;
 
-  private requestServer?: Server;
+  private ws?: WebSocket;
 
   private readonly accessories: PlatformAccessory[] = [];
 
   constructor(log: Logging, config: PlatformConfig, api: API) {
     this.log = log;
     this.api = api;
+    this.port = config["port"];
+    this.ipAddress = config["ip"];
+    this.apiKey = config["apiKey"];
 
     // probably parse config or something here
 
-    log.info("Example platform finished initializing!");
+    log.info("MIYO platform finished initializing!");
 
     /*
      * When this event is fired, homebridge restored all cached accessories from disk and did call their respective
@@ -72,10 +77,10 @@ class ExampleDynamicPlatform implements DynamicPlatformPlugin {
      * This event can also be used to start discovery of new accessories.
      */
     api.on(APIEvent.DID_FINISH_LAUNCHING, () => {
-      log.info("Example platform 'didFinishLaunching'");
+      log.info("MIYO platform 'didFinishLaunching'");
 
       // The idea of this plugin is that we open a http service which exposes api calls to add or remove accessories
-      this.createHttpService();
+      this.connectToMiyoCube();
     });
   }
 
@@ -90,11 +95,16 @@ class ExampleDynamicPlatform implements DynamicPlatformPlugin {
       this.log("%s identified!", accessory.displayName);
     });
 
-    accessory.getService(hap.Service.Lightbulb)!.getCharacteristic(hap.Characteristic.On)
-      .on(CharacteristicEventTypes.SET, (value: CharacteristicValue, callback: CharacteristicSetCallback) => {
-        this.log.info("%s Light was set to: " + value);
-        callback();
-      });
+    /* accessory
+      .getService(hap.Service.Lightbulb)!
+      .getCharacteristic(hap.Characteristic.On)
+      .on(
+        CharacteristicEventTypes.SET,
+        (value: CharacteristicValue, callback: CharacteristicSetCallback) => {
+          this.log.info("%s Light was set to: " + value);
+          callback();
+        }
+      ); */
 
     this.accessories.push(accessory);
   }
@@ -108,11 +118,13 @@ class ExampleDynamicPlatform implements DynamicPlatformPlugin {
     const uuid = hap.uuid.generate(name);
     const accessory = new Accessory(name, uuid);
 
-    accessory.addService(hap.Service.Lightbulb, "Test Light");
+    accessory.addService(hap.Service.LightSensor, "Lichtintensität");
 
     this.configureAccessory(accessory); // abusing the configureAccessory here
 
-    this.api.registerPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [accessory]);
+    this.api.registerPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [
+      accessory,
+    ]);
   }
 
   removeAccessories() {
@@ -120,26 +132,68 @@ class ExampleDynamicPlatform implements DynamicPlatformPlugin {
 
     this.log.info("Removing all accessories");
 
-    this.api.unregisterPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, this.accessories);
+    this.api.unregisterPlatformAccessories(
+      PLUGIN_NAME,
+      PLATFORM_NAME,
+      this.accessories
+    );
     this.accessories.splice(0, this.accessories.length); // clear out the array
   }
 
-  createHttpService() {
-    this.requestServer = http.createServer(this.handleRequest.bind(this));
-    this.requestServer.listen(18081, () => this.log.info("Http server listening on 18081..."));
-  }
+  connectToMiyoCube() {
+    this.ws = new WebSocket(`ws://${this.ipAddress}:${this.port}/`, {
+      perMessageDeflate: false,
+    });
 
-  private handleRequest(request: IncomingMessage, response: ServerResponse) {
-    if (request.url === "/add") {
-      this.addAccessory(new Date().toISOString());
-    } else if (request.url === "/remove") {
-      this.removeAccessories();
-    }
+    this.ws.on("open", () => {
+      this.ws?.send(
+        JSON.stringify({
+          id: 10,
+          apiKey: this.apiKey,
+          method: "Device.all",
+        })
+      );
+    });
 
-    response.writeHead(204); // 204 No content
-    response.end();
+    var interval = setInterval(() => {
+      this.ws?.send(
+        JSON.stringify({
+          id: 10,
+          apiKey: this.apiKey,
+          method: "Device.all",
+        })
+      );
+    }, 1000 * 60 *10);
+
+    this.ws.on("message", (message: Buffer) => {
+      //console.log('received: %s', message.toString('utf8'));
+      const update = JSON.parse(message.toString());
+      switch (update.id) {
+        case -1:
+          switch (update.notification) {
+            case "Device.stateChanged":
+              console.log("received Update: %s", update.params);
+              service.updateCharacteristic(Characteristic.Brightness, 60);
+              break;
+
+            default:
+              console.log("received notification: %s", update);
+              break;
+          }
+          break;
+        case 10:
+          const devices = update.params.devices;
+          Object.keys(devices).forEach(function (device) {
+            var value = devices[device];
+          });
+          console.log("received devices: %s", devices);
+          break;
+        default:
+          console.log("received message: %s", update);
+          break;
+      }
+    });
   }
 
   // ----------------------------------------------------------------------
-
 }
